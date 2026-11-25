@@ -144,6 +144,10 @@ class RoutesListActivity : ComponentActivity() {
                         onViewMap = { startActivity(Intent(this, ViewMapActivity::class.java)) },
                         onViewElevators = routesViewModel::loadElevatorStatus,
                         onViewAbout = { startActivity(Intent(this, AboutActivity::class.java)) },
+                        onUnfollowFollowedTrip = {
+                            application.followedTripRepository.clearFollowedDeparture()
+                            DeparturePollingWork.refresh(this, application.followedTripRepository)
+                        },
                         fareDiscountId = riderCategoryId,
                         fareDiscountOptions = riderCategories,
                         onFareDiscountChanged = { selectedId ->

@@ -81,7 +81,7 @@ android {
     }
 
     defaultConfig {
-        applicationId "in.izyum.bart"
+        applicationId "in.izyum.bart.dev"
         versionName = "1.0.4"
         versionCode = 5
         buildConfigField "String", "GIT_BUILD_HASH", "\"${gitBuildHash}\""
@@ -90,8 +90,18 @@ android {
         targetSdk = 37
     }
 
+    signingConfigs {
+        release {
+            storeFile file('release.keystore')
+            storePassword 'android'
+            keyAlias 'bartrunner'
+            keyPassword 'android'
+        }
+    }
+
     buildTypes {
         release {
+            signingConfig signingConfigs.release
             // Include native debug symbols
             ndk.debugSymbolLevel = 'FULL'
             minifyEnabled = true
@@ -111,6 +121,12 @@ android {
         abortOnError = true
     }
 }
+
+if (file('local.gradle').exists()) {
+    apply from: 'local.gradle'
+}
+
+
 
 // The exhaustive fixture audit is opt-in; keep normal unit runs focused on
 // the curated endpoint, transfer, and terminal cases.

@@ -364,6 +364,37 @@ class BartRunnerUiTest {
     }
 
     @Test
+    fun tripScreenHeroShowsFullScreenButtonWhenNotFollowing() {
+        val departure = testDeparture()
+        setTestContent {
+            BartRunnerTheme {
+                TripScreen(
+                    departure = departure,
+                    route = `in`.izyum.bart.model.StationPair(Station.CAST, Station.MLPT),
+                    isFollowingInitially = false,
+                    alarmVisible = false,
+                    timeSource = timeSource,
+                    alarmPending = false,
+                    alarmLeadTimeMinutes = 0,
+                    onBack = {},
+                    onFollow = {},
+                    onSetAlarm = {},
+                    onCancelAlarm = {},
+                    onClear = {},
+                    onShare = {},
+                    onSilenceAlarm = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithContentDescription("Full screen").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Full screen").performClick()
+        composeRule.onNodeWithContentDescription("Exit full screen").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Exit full screen").performClick()
+        composeRule.onNodeWithContentDescription("Exit full screen").assertDoesNotExist()
+    }
+
+    @Test
     fun systemMapExposesZoomControls() {
         setTestContent {
             BartRunnerTheme { SystemMapScreen(onBack = {}) }

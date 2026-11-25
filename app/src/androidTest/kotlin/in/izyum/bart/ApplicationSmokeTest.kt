@@ -13,7 +13,7 @@ class ApplicationSmokeTest {
     @Test
     fun applicationExposesTheLauncherActivity() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
-        assertEquals("in.izyum.bart", context.packageName)
+        assertEquals(BuildConfig.APPLICATION_ID, context.packageName)
         val launcher: Intent? = context.packageManager.getLaunchIntentForPackage(context.packageName)
         assertNotNull(launcher)
     }

@@ -131,6 +131,7 @@ import `in`.izyum.bart.activities.RoutesUiState
 import `in`.izyum.bart.backend.RouteDepartureProjection
 import `in`.izyum.bart.data.HomeStationPreferences
 import `in`.izyum.bart.data.KeepScreenOnPreferences
+import `in`.izyum.bart.data.TransferPreferences
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.platform.LocalView
@@ -251,6 +252,7 @@ fun HomeScreen(
     onHomeStationChanged: (Station?) -> Unit = {},
     keepScreenActive: Boolean = false,
     onKeepScreenActiveChanged: (Boolean) -> Unit = {},
+    onUnfollowFollowedTrip: (() -> Unit)? = null,
 ) {
     var showPicker by remember { mutableStateOf(false) }
     var pickerAddsFavorite by remember { mutableStateOf(false) }
@@ -598,6 +600,11 @@ fun HomeScreen(
             departure = followedTrip,
             pair = followedTrip.getStationPair(),
             timeSource = timeSource,
+            isFollowing = true,
+            onUnfollow = {
+                showFullScreenTrip = false
+                onUnfollowFollowedTrip?.invoke()
+            },
             onDismiss = { showFullScreenTrip = false },
         )
     }
@@ -1369,6 +1376,7 @@ fun TripScreen(
     alarmLeadTimeMinutes: Int,
     onBack: () -> Unit,
     onFollow: (Departure) -> Unit,
+    onUnfollow: () -> Unit = {},
     onSetAlarm: (Int) -> Unit,
     onCancelAlarm: () -> Unit,
     onClear: () -> Unit,
@@ -1408,7 +1416,7 @@ fun TripScreen(
                         fare = fare,
                         timeSource = timeSource,
                         tick = tick,
-                        onFullScreen = if (following) { { showFullScreenTrip = true } } else null,
+                        onFullScreen = { showFullScreenTrip = true },
                     )
                 }
                 if (!following) {
@@ -1433,7 +1441,13 @@ fun TripScreen(
         AlarmPickerDialog(departure, timeSource, onDismiss = { showAlarm = false }) { value -> showAlarm = false; onSetAlarm(value) }
     }
     if (showClear) {
-        AlertDialog(onDismissRequest = { showClear = false }, title = { Text(stringResource(R.string.stop_following_title)) }, text = { Text(stringResource(R.string.stop_following_message)) }, confirmButton = { TextButton(onClick = { showClear = false; onClear() }) { Text(stringResource(R.string.stop_following)) } }, dismissButton = { TextButton(onClick = { showClear = false }) { Text(stringResource(R.string.cancel)) } })
+        AlertDialog(
+            onDismissRequest = { showClear = false },
+            title = { Text(stringResource(R.string.stop_following_title)) },
+            text = { Text(stringResource(R.string.stop_following_message)) },
+            confirmButton = { TextButton(onClick = { showClear = false; following = false; onUnfollow(); onClear() }) { Text(stringResource(R.string.stop_following)) } },
+            dismissButton = { TextButton(onClick = { showClear = false }) { Text(stringResource(R.string.cancel)) } },
+        )
     }
     if (alarmVisible) {
         AlertDialog(
@@ -1448,6 +1462,19 @@ fun TripScreen(
             pair = route ?: departure.getStationPair(),
             fare = fare,
             timeSource = timeSource,
+            isFollowing = following,
+            onFollow = {
+                following = true
+                onFollow(departure)
+            },
+            onUnfollow = {
+                following = false
+                onUnfollow()
+            },
+            alarmPending = alarmPending,
+            alarmLeadTimeMinutes = alarmLeadTimeMinutes,
+            onSetAlarm = onSetAlarm,
+            onCancelAlarm = onCancelAlarm,
             onDismiss = { showFullScreenTrip = false },
         )
     }
@@ -1509,10 +1536,18 @@ fun FullScreenTripDialog(
     pair: StationPair?,
     fare: String? = null,
     timeSource: TimeSource,
+    isFollowing: Boolean = false,
+    onFollow: (() -> Unit)? = null,
+    onUnfollow: (() -> Unit)? = null,
+    alarmPending: Boolean = false,
+    alarmLeadTimeMinutes: Int = 0,
+    onSetAlarm: ((Int) -> Unit)? = null,
+    onCancelAlarm: (() -> Unit)? = null,
     onDismiss: () -> Unit,
 ) {
     val tick = rememberSecondTick(timeSource)
     val context = androidx.compose.ui.platform.LocalContext.current
+    var showAlarmPicker by remember { mutableStateOf(false) }
     val originName = pair?.origin?.getName() ?: departure.origin?.getName().orEmpty()
     val destinationName = pair?.destination?.getName() ?: departure.passengerDestination?.getName() ?: departure.trainDestination?.getName().orEmpty()
     val countdownText = DepartureTextFormatter.countdown(context, departure, tick)
@@ -1522,16 +1557,28 @@ fun FullScreenTripDialog(
 
     val app = context.applicationContext as? BartRunnerApplication
     val nextArrivesTime = remember(departure, tick) {
-        if (pair != null && app != null) {
+        val effectivePair = pair ?: departure.getStationPair()
+        if (effectivePair != null && app != null) {
             val snapshot = app.transitRepository.getLatestSnapshot()
             if (snapshot != null) {
-                val projection = RouteDepartureProjection(pair, app.bartGtfsNetworkSupplier)
-                val candidateDepartures = projection.project(snapshot).getDepartures()
-                val nextDeparture = candidateDepartures.firstOrNull {
-                    it.identity != departure.identity &&
-                    it.getMeanEstimate() > departure.getMeanEstimate()
-                } ?: candidateDepartures.getOrNull(1)
-                nextDeparture?.let {
+                val projection = RouteDepartureProjection(effectivePair, app.bartGtfsNetworkSupplier)
+                val allDepartures = projection.project(snapshot).getDepartures()
+                val showTransfers = TransferPreferences.getShowTransfersForRoute(context, effectivePair)
+                val candidateDepartures = if (showTransfers) {
+                    allDepartures
+                } else {
+                    allDepartures.filter { !it.requiresTransfer && !it.hasTransfers() }
+                }
+                val currentIndex = candidateDepartures.indexOfFirst { it.identity == departure.identity }
+                val nextDeparture = if (currentIndex >= 0 && currentIndex + 1 < candidateDepartures.size) {
+                    candidateDepartures[currentIndex + 1]
+                } else {
+                    candidateDepartures.firstOrNull { candidate ->
+                        candidate.identity != departure.identity &&
+                            candidate.getMeanEstimate() > departure.getMeanEstimate()
+                    }
+                }
+                nextDeparture?.takeIf { it.identity != departure.identity }?.let {
                     DepartureTextFormatter.estimatedArrivalTime(context, it).ifBlank { null }
                 }
             } else {
@@ -1600,6 +1647,46 @@ fun FullScreenTripDialog(
                         )
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (onFollow != null || onUnfollow != null) {
+                            IconButton(
+                                onClick = {
+                                    if (isFollowing) {
+                                        onUnfollow?.invoke()
+                                    } else {
+                                        onFollow?.invoke()
+                                    }
+                                },
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Train,
+                                    contentDescription = stringResource(
+                                        if (isFollowing) R.string.stop_following else R.string.follow_this_trip,
+                                    ),
+                                    modifier = Modifier.size(28.dp),
+                                    tint = if (isFollowing) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f),
+                                )
+                            }
+                        }
+                        if (isFollowing && (onSetAlarm != null || onCancelAlarm != null)) {
+                            IconButton(
+                                onClick = {
+                                    if (alarmPending) {
+                                        onCancelAlarm?.invoke()
+                                    } else if (departure.getMeanSecondsLeft(tick) > 60) {
+                                        showAlarmPicker = true
+                                    }
+                                },
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Alarm,
+                                    contentDescription = stringResource(
+                                        if (alarmPending) R.string.notification_cancel_alarm else R.string.set_alarm,
+                                    ),
+                                    modifier = Modifier.size(28.dp),
+                                    tint = if (alarmPending) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f),
+                                )
+                            }
+                        }
                         IconButton(
                             onClick = {
                                 val newValue = !keepScreenActive
@@ -1827,6 +1914,16 @@ fun FullScreenTripDialog(
                     }
                 }
             }
+        }
+    }
+    if (showAlarmPicker && onSetAlarm != null) {
+        AlarmPickerDialog(
+            departure = departure,
+            timeSource = timeSource,
+            onDismiss = { showAlarmPicker = false },
+        ) { minutes ->
+            showAlarmPicker = false
+            onSetAlarm(minutes)
         }
     }
 }

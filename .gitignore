@@ -12,5 +12,7 @@ gradle/gradle-daemon-jvm.properties
 .idea
 *.iml
 local.properties
+local.gradle
+app/local.gradle
 app/release
 AGENTS.md

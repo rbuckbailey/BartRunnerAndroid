@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:installLocation="auto"
     >
 
@@ -12,12 +13,7 @@
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
-    <uses-feature
-        android:name="android.hardware.type.automotive"
-        android:required="false" />
-    <uses-feature
-        android:name="android.software.car.expressive_app"
-        android:required="false" />
+
 
     <application
         android:name=".BartRunnerApplication"
@@ -72,9 +68,6 @@
         <meta-data
             android:name="androidx.car.app.minCarApiLevel"
             android:value="1" />
-        <meta-data
-            android:name="androidx.car.app.category"
-            android:value="poi" />
 
         <service
             android:name=".car.BartCarAppService"
@@ -87,6 +80,13 @@
                 <category android:name="androidx.car.app.category.POI" />
             </intent-filter>
         </service>
+
+        <!-- Car App Library Exported Permission Activity -->
+        <activity
+            android:name="androidx.car.app.CarAppPermissionActivity"
+            android:exported="true"
+            tools:replace="android:exported"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
     </application>
 
 </manifest>

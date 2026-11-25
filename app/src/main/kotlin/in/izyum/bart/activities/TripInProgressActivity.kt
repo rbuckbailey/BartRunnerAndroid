@@ -147,13 +147,13 @@ class TripInProgressActivity : ComponentActivity() {
                     alarmLeadTimeMinutes = tripActionsState.alarmLeadTimeMinutes,
                     onBack = { finish() },
                     onFollow = { followTrip(it) },
+                    onUnfollow = ::unfollowTrip,
                     onSetAlarm = ::enableAlarm,
                     onCancelAlarm = {
                         tripActionsViewModel.cancelAlarm()
                     },
                     onClear = {
-                        tripActionsViewModel.clearTrip()
-                        stopAlarmTrackingService()
+                        unfollowTrip()
                         finish()
                     },
                     onShare = ::shareArrival,
@@ -253,6 +253,13 @@ class TripInProgressActivity : ComponentActivity() {
         requestNotificationPermissionIfNeeded()
         startAlarmTrackingService()
         isFollowing = true
+    }
+
+    private fun unfollowTrip() {
+        if (!isFollowing) return
+        tripActionsViewModel.clearTrip()
+        stopAlarmTrackingService()
+        isFollowing = false
     }
 
     private fun resolveFare(app: BartRunnerApplication, route: StationPair?) {
